@@ -229,6 +229,9 @@
               (set! status :up-to-date)
               (set! last-run-propagated-value false))
             (let [^ISignalSource maybe-signal-source (first maybe-signal-sources)
+                  ;; Only this source's last run is consulted. That's enough because a
+                  ;; source whose run propagates a new value settles its :maybe-stale
+                  ;; watchers on the spot (see below), so a later no-op run can't hide it.
                   its-last-effective-run-propagated-value (run-if-needed maybe-signal-source)]
               (if its-last-effective-run-propagated-value
                 (set! status :stale)
@@ -249,7 +252,11 @@
                     (propagation-filter-fn value new-value))
               (do
                 (set! value new-value)
-                (set! last-run-propagated-value true))
+                (set! last-run-propagated-value true)
+                ;; Watchers still :maybe-stale on this node may outlive this run:
+                ;; if this node runs again before they are pulled, that run's
+                ;; propagated value is all they would see. Settle them now.
+                (notify-signal-watchers this true))
               (set! last-run-propagated-value false)))
           (set! status :up-to-date)
           (notify-lifecycle-event this status)
